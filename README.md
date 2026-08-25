@@ -21,12 +21,31 @@ playlists (reordering, adding tracks).
 
 ```
 .venv/bin/python tunes.py <playlist-name> [--count 30] [--out-dir "/Volumes/Extreme SSD"]
+                          [--reference FILE] [--match-threshold 0.78]
 ```
 
 Writes `<playlist-slug>-tracks.md` to the given directory (default: Extreme SSD), overwritten each
 run, listing the N most recently added tracks by real `added_at` timestamp — something the
 Spotify app's UI doesn't surface directly for arbitrary playlists. Invoked via `/tunes
 <playlist-name>` as a Claude Code skill. Read-only.
+
+**`--reference FILE`** additionally cross-references those N tracks against a Rekordbox text export
+(same format as `reorder_by_reference.py` uses) and writes `<playlist-slug>-missing.md` — the
+tracks that aren't in Rekordbox yet, i.e. what still needs pulling for the set.
+
+- Only the N exported tracks are checked, not the whole playlist — the question it answers is
+  "what's new since I last built this crate?", not "what do I not own?".
+- Duplicates are collapsed first, keyed on normalized title+artist rather than Spotify URI, so the
+  same record appearing as both a single and a compilation cut counts once.
+- Threshold is 0.78, higher than the reorder path's 0.72: a false positive here silently drops a
+  track off the to-buy list, which is worse than listing one you already own.
+- The report ends with a **closest near-misses** section — each missing track's best reference
+  match and score, so a borderline call is visible rather than buried. Scores just under threshold
+  are worth an eyeball.
+
+```
+.venv/bin/python tunes.py "S26" --reference "/Volumes/Extreme SSD/S26.txt"
+```
 
 ### `reorder_by_reference.py` — reorder a playlist to match an external track list
 
@@ -38,13 +57,17 @@ Use case: you have a track list from somewhere else (DJ software export, a sessi
 etc.) in a specific order, and want the Spotify playlist to match that order — without deleting
 anything that's in the playlist but not in the reference list.
 
-- **Reference file format**: tab-separated, UTF-16 encoded, header row + one row per track with
-  columns `#`, `Track Title`, `Artist`, ... (extra columns ignored). This is what Rekordbox
-  exports as a text playlist.
+- **Reference file format**: tab-separated, header row + one row per track with columns `#`,
+  `Track Title`, `Artist`, ... (extra columns ignored). This is what Rekordbox exports as a text
+  playlist. Encoding is sniffed — Rekordbox writes UTF-16 LE, but a file that's been through an
+  editor may come back as UTF-8 and is handled too.
 - **Matching**: fuzzy title+artist matching (70/30 weighted), normalizing away generic descriptors
   like "(Original Mix)"/"(Radio Edit)" that Spotify and DJ software apply inconsistently, while
-  keeping genuine remix credits intact. Threshold 0.72 for reorder-matching (conservative — a
-  missed match just gets skipped, no harm done).
+  keeping genuine remix credits intact. Artist acts as a **gate**, not just a 30% contributor:
+  below 0.35 artist similarity the score is capped beneath every threshold, because stripping
+  "(Original Mix)" can make two unrelated records with the same one-word title score a perfect
+  1.0 on title alone. Threshold 0.72 for reorder-matching (conservative — a missed match just gets
+  skipped, no harm done).
 - **Reordering**: matched tracks are moved to the front of the playlist in reference-file order;
   everything else in the playlist stays, appended after, in its existing relative order. Nothing
   is ever removed.

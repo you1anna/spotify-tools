@@ -13,9 +13,10 @@ Without --apply, prints a dry-run report only. Requires write scope
 (playlist-modify-public/private) in addition to the read scope tunes.py
 uses — first run under this scope will re-prompt for authorization.
 
-Reference file format: tab-separated, UTF-16 encoded, header row + one row
-per track with columns "#", "Track Title", "Artist", ... (extra columns are
-ignored). This is the format Rekordbox exports as a text playlist.
+Reference file format: tab-separated, header row + one row per track with
+columns "#", "Track Title", "Artist", ... (extra columns are ignored). This is
+the format Rekordbox exports as a text playlist. Encoding is sniffed (Rekordbox
+writes UTF-16 LE; UTF-8 is accepted too).
 """
 
 from __future__ import annotations
@@ -32,24 +33,11 @@ from spotify_common import (
     find_playlist,
     get_client,
     match_score,
+    parse_reference,
 )
 
 MATCH_THRESHOLD = 0.72
 ADD_THRESHOLD = 0.82  # higher bar than reorder-matching: this writes new tracks, so fewer false positives
-
-
-def parse_reference(path: Path) -> list[dict]:
-    text = path.read_text(encoding="utf-16")
-    lines = [l for l in text.splitlines() if l.strip()]
-    if not lines:
-        raise SystemExit(f"{path} is empty.")
-    rows = []
-    for line in lines[1:]:  # skip header
-        cols = line.split("\t")
-        if len(cols) < 3:
-            continue
-        rows.append({"pos": cols[0], "title": cols[1], "artist": cols[2]})
-    return rows
 
 
 def find_missing_on_spotify(sp: spotipy.Spotify, unmatched_reference: list[dict]) -> tuple[list[dict], list[dict]]:
@@ -153,7 +141,9 @@ def compute_moves(target_order: list[int]) -> list[tuple[int, int]]:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("playlist", help="Playlist name (case-insensitive)")
-    parser.add_argument("reference", type=Path, help="Reference file (tab-separated, UTF-16)")
+    parser.add_argument(
+        "reference", type=Path, help="Rekordbox text export (tab-separated; encoding sniffed)"
+    )
     parser.add_argument("--apply", action="store_true", help="Actually reorder (default: dry run)")
     parser.add_argument("--show-order", action="store_true", help="Print the full planned final order")
     parser.add_argument(
@@ -163,7 +153,12 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    reference = parse_reference(args.reference)
+    reference, malformed = parse_reference(args.reference)
+    if malformed:
+        print(f"Skipped {len(malformed)} malformed reference row(s) (fewer than 3 columns):")
+        for line in malformed:
+            print(f"  ? {line[:100]}")
+        print()
 
     scope = f"{READ_SCOPE} {WRITE_SCOPE}"
     sp = get_client(scope)
