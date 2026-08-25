@@ -18,6 +18,11 @@ gotchas for Claude Code sessions working in this repo.
   optionally add tracks that are missing (read+write).
 
 ## Conventions
+- **Track lines are `* <artist> <title>` — a plain space, never a dash or em dash.** These lists
+  get pasted straight into search boxes (Soulseek etc.), and a separator has to be hand-deleted
+  every time. `tunes.py`'s `format_line()` is the single place this is rendered; every report it
+  writes goes through it, so the exported and missing lists can't drift apart. Don't reintroduce a
+  separator for readability.
 - Read-only scripts request `READ_SCOPE` only; anything that writes to a playlist must request
   `WRITE_SCOPE` too. Scope is additive and cached in `.spotify-cache` — requesting a broader scope
   than what's cached triggers a one-time re-auth browser prompt automatically, no manual cache

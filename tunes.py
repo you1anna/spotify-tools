@@ -42,6 +42,10 @@ DEFAULT_MATCH_THRESHOLD = 0.78
 
 
 def format_line(track: dict) -> str:
+    """The one place a track is rendered as a list line, for every report this
+    script writes. Artist and title are separated by a plain space — no dash,
+    no em dash — so a line can be pasted straight into a search box as a query.
+    Don't add a separator back in for "readability"."""
     return f"* {track['artists']} {track['name']}"
 
 
@@ -108,7 +112,7 @@ def write_missing_report(
         lines.append("Nothing missing — every track checked is already in the reference.")
     else:
         for track in missing:
-            lines.append(f"* {track['artists']} — {track['name']}  _(added {track['added_at'][:10]})_")
+            lines.append(f"{format_line(track)}  _(added {track['added_at'][:10]})_")
         lines.extend(
             [
                 "",
