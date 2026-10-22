@@ -10,6 +10,7 @@ from __future__ import annotations
 import codecs
 import difflib
 import re
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -35,24 +36,28 @@ def get_client(scope: str) -> spotipy.Spotify:
     return spotipy.Spotify(auth_manager=auth_manager)
 
 
+def iter_user_playlists(sp: spotipy.Spotify) -> Iterator[dict]:
+    offset = 0
+    while True:
+        page = sp.current_user_playlists(limit=50, offset=offset)
+        yield from page["items"]
+        if page["next"] is None:
+            return
+        offset += 50
+
+
 def find_playlist(sp: spotipy.Spotify, name: str) -> dict:
     """Find a playlist by case-insensitive name. Prefers an exact match;
     falls back to substring match. Raises if none or multiple match."""
     target = name.strip().lower()
     exact_matches: list[dict] = []
     substring_matches: list[dict] = []
-    offset = 0
-    while True:
-        page = sp.current_user_playlists(limit=50, offset=offset)
-        for playlist in page["items"]:
-            playlist_name = playlist["name"].strip().lower()
-            if playlist_name == target:
-                exact_matches.append(playlist)
-            elif target in playlist_name:
-                substring_matches.append(playlist)
-        if page["next"] is None:
-            break
-        offset += 50
+    for playlist in iter_user_playlists(sp):
+        playlist_name = playlist["name"].strip().lower()
+        if playlist_name == target:
+            exact_matches.append(playlist)
+        elif target in playlist_name:
+            substring_matches.append(playlist)
 
     matches = exact_matches or substring_matches
     if not matches:
@@ -238,3 +243,55 @@ def match_score(ref_title: str, ref_artist: str, track: dict) -> float:
     if artist_ratio < ARTIST_FLOOR:
         return min(score, ARTIST_MISMATCH_CAP)
     return score
+
+
+def match_unsplit(line: str, track: dict) -> float:
+    """Score a track line with no artist/title separator ("* <artist> <title>",
+    this repo's own list format) against a Spotify track.
+
+    The boundary between artist and title can't be recovered from the line
+    alone, so take it from the candidate: if the line starts or ends with one
+    of the track's credited artists, the rest is the title and match_score
+    applies as normal. If no credit appears at either end, the artist can't
+    have agreed, so the candidate gets no score — the same gate match_score
+    applies to a contradictory artist.
+    """
+    n = normalize(line)
+    credits = [track["artists"], *track["artists"].split(", ")]
+    # Disambiguators like "Fabe (Ger)" rarely appear in a hand-written list.
+    credits += [re.sub(r"\s*\([^)]*\)", "", c) for c in credits]
+    best = 0.0
+    for credit in credits:
+        c = normalize(credit)
+        if not c or c == n:
+            continue
+        if n.startswith(c + " "):
+            best = max(best, match_score(n[len(c) + 1 :], credit, track))
+        if n.endswith(" " + c):
+            best = max(best, match_score(n[: -len(c) - 1], credit, track))
+    return best
+
+
+def search_catalog(
+    sp: spotipy.Spotify, query: str, score: Callable[[dict], float], limit: int = 5
+) -> tuple[dict | None, float]:
+    """Search Spotify's catalog and return the best-scoring candidate as a
+    uri/name/artists dict with its score, or (None, 0.0). Callers apply their
+    own threshold, so a near miss can still be reported. Search errors
+    propagate: whether a failed lookup counts as "not found" is the caller's
+    call."""
+    results = sp.search(q=query, type="track", limit=limit)
+    best_track: dict | None = None
+    best_score = 0.0
+    for item in results.get("tracks", {}).get("items", []):
+        if not item or not item.get("uri"):
+            continue
+        candidate = {
+            "uri": item["uri"],
+            "name": item["name"],
+            "artists": ", ".join(a["name"] for a in item["artists"]),
+        }
+        s = score(candidate)
+        if s > best_score:
+            best_track, best_score = candidate, s
+    return best_track, best_score

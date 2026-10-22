@@ -34,6 +34,7 @@ from spotify_common import (
     get_client,
     match_score,
     parse_reference,
+    search_catalog,
 )
 
 MATCH_THRESHOLD = 0.72
@@ -43,7 +44,7 @@ ADD_THRESHOLD = 0.82  # higher bar than reorder-matching: this writes new tracks
 def find_missing_on_spotify(sp: spotipy.Spotify, unmatched_reference: list[dict]) -> tuple[list[dict], list[dict]]:
     """For each unmatched reference row, search Spotify's catalog for a confident
     match. Returns (found, still_missing) where each `found` entry has the
-    original row plus a `track` dict (uri/name/artists) and `score`."""
+    original row plus the matched track's uri/name/artists and `score`."""
     found: list[dict] = []
     still_missing: list[dict] = []
     for row in unmatched_reference:
@@ -52,31 +53,17 @@ def find_missing_on_spotify(sp: spotipy.Spotify, unmatched_reference: list[dict]
             # issue) — too risky to search on title alone, skip.
             still_missing.append(row)
             continue
-        query = f'{row["title"]} {row["artist"]}'
         try:
-            results = sp.search(q=query, type="track", limit=5)
+            track, score = search_catalog(
+                sp,
+                f'{row["title"]} {row["artist"]}',
+                lambda candidate: match_score(row["title"], row["artist"], candidate),
+            )
         except Exception:
             still_missing.append(row)
             continue
-        candidates = results.get("tracks", {}).get("items", [])
-        best_track = None
-        best_score = 0.0
-        for track in candidates:
-            candidate = {"name": track["name"], "artists": ", ".join(a["name"] for a in track["artists"])}
-            score = match_score(row["title"], row["artist"], candidate)
-            if score > best_score:
-                best_score = score
-                best_track = track
-        if best_track is not None and best_score >= ADD_THRESHOLD:
-            found.append(
-                {
-                    "row": row,
-                    "score": best_score,
-                    "uri": best_track["uri"],
-                    "name": best_track["name"],
-                    "artists": ", ".join(a["name"] for a in best_track["artists"]),
-                }
-            )
+        if track is not None and score >= ADD_THRESHOLD:
+            found.append({"row": row, "score": score, **track})
         else:
             still_missing.append(row)
     return found, still_missing

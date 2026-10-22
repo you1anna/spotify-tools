@@ -9,13 +9,15 @@ gotchas for Claude Code sessions working in this repo.
 
 ## Layout
 - `spotify_common.py` — shared auth, playlist lookup, track fetching, reference-file parsing,
-  fuzzy title/artist matching. Both scripts below import from it; don't duplicate this logic back
+  fuzzy title/artist matching, catalog search. The scripts below import from it; don't duplicate this logic back
   into a script.
 - `tunes.py` — export a playlist's most-recently-added tracks to markdown, optionally
   cross-referencing them against a Rekordbox export to list what's not in Rekordbox yet
   (`--reference`). Read-only.
 - `reorder_by_reference.py` — reorder a playlist to match an external reference track list, and
   optionally add tracks that are missing (read+write).
+- `create_playlist.py` — create a new playlist from a plain-text track list, adding only confident
+  catalog matches (read+write). Tests: `test_create_playlist.py` (offline, fake client).
 
 ## Conventions
 - **Track lines are `* <artist> <title>` — a plain space, never a dash or em dash.** These lists
@@ -72,3 +74,7 @@ gotchas for Claude Code sessions working in this repo.
   fallback decodes a UTF-16 file to mojibake instead of raising.
 - `parse_reference` returns `(rows, malformed)`, not a bare list — malformed rows are surfaced,
   not silently skipped. Both callers print the count.
+- Unsplit track lines (`* <artist> <title>`) can't be divided into artist and title on their
+  own, so `match_unsplit` takes the boundary from each search candidate's credited artists. A
+  candidate whose artist isn't at the start or end of the line scores 0, which keeps the same
+  artist gate as `match_score`.

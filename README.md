@@ -89,9 +89,32 @@ Example workflow:
 .venv/bin/python reorder_by_reference.py "S26" ~/Desktop/S26.txt --add-missing --apply
 ```
 
+### `create_playlist.py`: new playlist from a track list
+
+```
+.venv/bin/python create_playlist.py <new-playlist-name> <track-list-file> [--public] [--description TEXT] [--apply]
+```
+
+Searches Spotify for each line of a plain-text list and creates a new playlist (private by
+default) holding the confident matches, in list order.
+
+- **Line formats**: `Artist - Title` (en/em dash or tab also work), `Title - Artist`, or this repo's
+  own `* Artist Title` with no separator. Bullets and `1.` / `01)` numbering are stripped.
+- **Matching** uses the same scoring and artist gate as above, threshold 0.82. Lines without a
+  confident match are listed with their closest candidate and score; repeated tracks are added once.
+- Refuses to run if a playlist with that name already exists. **Default is a dry run**; pass
+  `--apply` to create it.
+
+```
+.venv/bin/python create_playlist.py "Friday picks" ~/Desktop/picks.txt
+.venv/bin/python create_playlist.py "Friday picks" ~/Desktop/picks.txt --apply
+```
+
+Tests (offline): `.venv/bin/python -m unittest -v`
+
 ## `spotify_common.py`
 
-Shared by both scripts above: OAuth client setup, playlist lookup by name, track fetching, and the
+Shared by the scripts above: OAuth client setup, playlist lookup by name, track fetching, catalog search, and the
 fuzzy matching used to reconcile external track lists against Spotify's metadata. Not a
 standalone tool — import from it if you're writing a third script here.
 
