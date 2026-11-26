@@ -22,7 +22,7 @@ gotchas for Claude Code sessions working in this repo.
 
 ## Conventions
 - **Track lines are `* <artist> <title>` — a plain space, never a dash or em dash.** These lists
-  get pasted straight into search boxes (Soulseek etc.), and a separator has to be hand-deleted
+  get pasted straight into search boxes in other apps, and a separator has to be hand-deleted
   every time. `tunes.py`'s `format_line()` is the single place this is rendered; every report it
   writes goes through it, so the exported and missing lists can't drift apart. Don't reintroduce a
   separator for readability.
