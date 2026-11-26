@@ -4,7 +4,8 @@ Scripts against the real Spotify Web API (via `spotipy`), because the `claude.ai
 connector only exposes an AI-curated/generative view of playlists — no `added_at`, no reliable
 ordering, no write access.
 
-See [README.md](README.md) for setup and usage. This file is repo-specific conventions and
+See [README.md](README.md) for setup and usage. This repository is public. Before a commit, obey the "Public repository"
+rules in [AGENTS.md](AGENTS.md#public-repository). This file is repo-specific conventions and
 gotchas for Claude Code sessions working in this repo.
 
 ## Layout
